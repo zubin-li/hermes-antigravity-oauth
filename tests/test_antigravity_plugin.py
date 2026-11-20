@@ -26,7 +26,7 @@ from client import (
     is_authenticated,
     resolve_agy_command,
 )
-from process import _check_early_quota_error
+from process import _agy_models_live_ok, _check_early_quota_error
 
 # Load the plugin's package entry as a real package (not a plain module) so its
 # `from .client import ...` relative imports resolve. Hermes itself discovers a
@@ -227,6 +227,100 @@ class AntigravityPluginTests(unittest.TestCase):
                 mock_os.name = "nt"
                 self.assertFalse(is_authenticated())
                 run.assert_not_called()
+
+    def test_agy_models_live_ok_outcomes(self):
+        cases = [
+            (SimpleNamespace(returncode=0), True),
+            (SimpleNamespace(returncode=1), False),
+            (subprocess.TimeoutExpired(["agy", "models"], 45), False),
+            (FileNotFoundError(), False),
+        ]
+        for result, expected in cases:
+            with self.subTest(result=repr(result)):
+                kwargs = {"side_effect": result} if isinstance(result, Exception) else {"return_value": result}
+                with patch("process.subprocess.run", **kwargs) as run:
+                    self.assertIs(_agy_models_live_ok("/fake/agy"), expected)
+                    if isinstance(result, SimpleNamespace):
+                        run.assert_called_once()
+                        self.assertEqual(run.call_args.args[0], ["/fake/agy", "models"])
+                        self.assertIs(run.call_args.kwargs.get("stdout"), subprocess.DEVNULL)
+                        self.assertIs(run.call_args.kwargs.get("stderr"), subprocess.DEVNULL)
+                        self.assertIs(run.call_args.kwargs.get("stdin"), subprocess.DEVNULL)
+
+    def test_keychain_false_negative_live_models_probe_allows_worker_turn(self):
+        tmp_dir = tempfile.TemporaryDirectory()
+        self.addCleanup(tmp_dir.cleanup)
+        client = AntigravityClient(cwd=tmp_dir.name)
+        fake_events = [
+            json.dumps({"event": "init", "conversation_id": "conv-live-probe"}),
+            json.dumps({
+                "event": "result",
+                "result": {
+                    "status": "SUCCESS",
+                    "response": "ok\n",
+                    "usage": {"input_tokens": 1, "output_tokens": 1, "total_tokens": 2},
+                },
+            }),
+        ]
+        mock_proc = MagicMock()
+        mock_proc.stdin = MagicMock()
+        mock_proc.stdout = io.StringIO("\n".join(fake_events) + "\n")
+        mock_proc.stderr = io.StringIO("")
+        mock_proc.poll.return_value = 0
+        mock_proc.wait.return_value = 0
+        with patch("client.is_authenticated", return_value=False), \
+                patch("client._agy_models_live_ok", return_value=True) as live_ok, \
+                patch("subprocess.Popen", return_value=mock_proc):
+            res = client.chat.completions.create(
+                model="gemini-3.8-flash-high",
+                messages=[{"role": "user", "content": "ping"}],
+                stream=False,
+            )
+        live_ok.assert_called_once_with(client._command)
+        self.assertEqual(res.choices[0].message.content, "ok")
+
+    def test_metadata_auth_false_and_live_probe_fails_raises_not_authenticated(self):
+        tmp_dir = tempfile.TemporaryDirectory()
+        self.addCleanup(tmp_dir.cleanup)
+        client = AntigravityClient(cwd=tmp_dir.name)
+        with patch("client.is_authenticated", return_value=False), \
+                patch("client._agy_models_live_ok", return_value=False):
+            with self.assertRaises(RuntimeError) as ctx:
+                client.chat.completions.create(
+                    model="gemini-3.8-flash-high",
+                    messages=[{"role": "user", "content": "ping"}],
+                    stream=False,
+                )
+        self.assertIn("not authenticated", str(ctx.exception).lower())
+
+    def test_authenticated_path_skips_live_models_probe(self):
+        tmp_dir = tempfile.TemporaryDirectory()
+        self.addCleanup(tmp_dir.cleanup)
+        client = AntigravityClient(cwd=tmp_dir.name)
+        fake_events = [
+            json.dumps({"event": "init", "conversation_id": "conv-no-probe"}),
+            json.dumps({
+                "event": "result",
+                "result": {
+                    "status": "SUCCESS",
+                    "response": "ok\n",
+                    "usage": {"input_tokens": 1, "output_tokens": 1, "total_tokens": 2},
+                },
+            }),
+        ]
+        mock_proc = MagicMock()
+        mock_proc.stdin = MagicMock()
+        mock_proc.stdout = io.StringIO("\n".join(fake_events) + "\n")
+        mock_proc.stderr = io.StringIO("")
+        mock_proc.poll.return_value = 0
+        mock_proc.wait.return_value = 0
+        with patch("client._agy_models_live_ok") as live_ok, patch("subprocess.Popen", return_value=mock_proc):
+            client.chat.completions.create(
+                model="gemini-3.8-flash-high",
+                messages=[{"role": "user", "content": "ping"}],
+                stream=False,
+            )
+        live_ok.assert_not_called()
 
     def test_format_messages_prompt(self):
         messages = [

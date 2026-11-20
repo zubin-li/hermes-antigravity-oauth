@@ -497,6 +497,32 @@ def is_authenticated() -> bool:
         return False
 
 
+# Bounded live session check when keychain/token heuristics false-negative (macOS).
+_AGY_MODELS_PROBE_TIMEOUT_SECONDS = 45.0
+
+
+def _agy_models_live_ok(agy: str | None = None) -> bool:
+    """True when official ``agy models`` exits 0 without exposing credential output."""
+    cmd = agy or resolve_agy_command()
+    if not os.path.isabs(cmd):
+        resolved = shutil.which(cmd)
+        if not resolved:
+            return False
+        cmd = resolved
+    try:
+        out = subprocess.run(
+            [cmd, "models"],
+            stdin=subprocess.DEVNULL,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+            timeout=_AGY_MODELS_PROBE_TIMEOUT_SECONDS,
+            check=False,
+        )
+    except (OSError, subprocess.SubprocessError):
+        return False
+    return out.returncode == 0
+
+
 def setup_isolated_home(cwd: Path | str) -> tuple[Path, Path]:
     """Create isolated HOME inside cwd and link authentic oauth token."""
     isolated_home = Path(cwd) / "home"

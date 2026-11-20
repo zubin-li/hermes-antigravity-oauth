@@ -34,6 +34,7 @@ try:
         _own_process_group,
         build_child_env,
         is_authenticated,
+        _agy_models_live_ok,
         resolve_agy_command,
         resolve_real_token_path,
         setup_isolated_home,
@@ -64,6 +65,7 @@ except ImportError:
         _own_process_group,
         build_child_env,
         is_authenticated,
+        _agy_models_live_ok,
         resolve_agy_command,
         resolve_real_token_path,
         setup_isolated_home,
@@ -582,7 +584,7 @@ class AntigravityClient:
         if self.is_closed:
             raise RuntimeError("AntigravityClient is closed.")
 
-        if not is_authenticated():
+        if not is_authenticated() and not _agy_models_live_ok(self._command):
             raise RuntimeError(
                 "Antigravity CLI is not authenticated. Please run 'agy' in your terminal "
                 "to log in with your Google account."
