@@ -340,7 +340,7 @@ class AntigravityPluginTests(unittest.TestCase):
             }
         ]
         prompt = _format_messages_as_prompt(messages, tools=tools)
-        self.assertIn("Conversation transcript:", prompt)
+        self.assertIn("Conversation transcript (complete;", prompt)
         self.assertIn("System:\nYou are a helpful coding assistant.", prompt)
         self.assertIn("User:\nHello!", prompt)
         self.assertIn("Assistant:\nHi there!", prompt)
@@ -433,7 +433,7 @@ class AntigravityPluginTests(unittest.TestCase):
         # Older tools (indices 0 to 3) should be truncated
         for idx in range(4):
             self.assertIn(f"Tool Result (c_{idx}):", prompt)
-            self.assertIn("[... tool output truncated:", prompt)
+            self.assertIn("[... older tool output elided by Hermes", prompt)
 
         # Recent tools (the last 8, indices 4 to 11) should remain intact (1000 X's)
         for idx in range(4, 12):
@@ -447,7 +447,7 @@ class AntigravityPluginTests(unittest.TestCase):
             {"role": "user", "content": "Analyze"},
         ]
         prompt = _format_messages_as_prompt(messages)
-        self.assertIn("[... large tool output truncated: 25008 chars ...]", prompt)
+        self.assertIn("[... long tool output elided by Hermes to save space (25008 chars)", prompt)
         self.assertIn("START", prompt)
         self.assertIn("END", prompt)
 
@@ -455,7 +455,7 @@ class AntigravityPluginTests(unittest.TestCase):
         from client import _format_delta_prompt
         tool_delta = [{"role": "tool", "tool_call_id": "t_big", "content": "HEAD" + ("Z" * 25000) + "TAIL"}]
         d_prompt = _format_delta_prompt(tool_delta)
-        self.assertIn("[... large tool output truncated: 25008 chars ...]", d_prompt)
+        self.assertIn("[... long tool output elided by Hermes to save space (25008 chars)", d_prompt)
         self.assertIn("HEAD", d_prompt)
         self.assertIn("TAIL", d_prompt)
 

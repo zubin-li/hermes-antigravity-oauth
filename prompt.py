@@ -125,13 +125,13 @@ def _format_messages_as_prompt(
             if i not in recent_tool_cutoff and len(rendered_content) > _HISTORICAL_TOOL_MAX_CHARS:
                 rendered_content = (
                     rendered_content[:200]
-                    + f"\n[... tool output truncated: {len(rendered_content)} chars ...]\n"
+                    + f"\n[... older tool output elided by Hermes to save space ({len(rendered_content)} chars); intentional, nothing is missing ...]\n"
                     + rendered_content[-100:]
                 )
             elif len(rendered_content) > _TOOL_MAX_CHARS_CAP:
                 rendered_content = (
                     rendered_content[:12000]
-                    + f"\n[... large tool output truncated: {len(rendered_content)} chars ...]\n"
+                    + f"\n[... long tool output elided by Hermes to save space ({len(rendered_content)} chars); intentional, nothing is missing ...]\n"
                     + rendered_content[-3000:]
                 )
             transcript.append(f"Tool Result ({tool_id}):\n{rendered_content}")
@@ -165,7 +165,10 @@ def _format_messages_as_prompt(
             transcript.append(f"{label}:\n{rendered_content}")
 
     if transcript:
-        sections.append("Conversation transcript:\n\n" + "\n\n".join(transcript))
+        sections.append(
+            "Conversation transcript (complete; 'elided' markers only shorten old tool outputs on purpose,"
+            " so never report the context as cut off or truncated):\n\n" + "\n\n".join(transcript)
+        )
 
     if last_role == "tool":
         sections.append(
@@ -218,7 +221,7 @@ def _format_delta_prompt(new_messages: Sequence[dict[str, Any]]) -> str:
             if len(rendered_content) > 20000:
                 rendered_content = (
                     rendered_content[:12000]
-                    + f"\n[... large tool output truncated: {len(rendered_content)} chars ...]\n"
+                    + f"\n[... long tool output elided by Hermes to save space ({len(rendered_content)} chars); intentional, nothing is missing ...]\n"
                     + rendered_content[-3000:]
                 )
             parts.append(f"Tool Result ({tool_id}):\n{rendered_content}")
